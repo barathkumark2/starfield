@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Starfield — Steerable Warp Drive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --text:#e7eef6;
+    --dim:#7f8d9c;
+    --accent:#7fd1c4;
+    --accent-warm:#d9b26a;
+    --glass:rgba(11,15,21,.60);
+    --border:rgba(255,255,255,.09);
+    --font-body:'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;overflow:hidden;color:var(--text);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(ellipse 62% 48% at 74% 26%, rgba(58,120,126,.11), rgba(0,0,0,0) 72%),
+      radial-gradient(ellipse 90% 72% at 50% 42%, #131c26 0%, #0a1017 46%, #05080c 79%, #030507 100%);
+  }
+  #space{
+    position:fixed;inset:0;width:100%;height:100%;
+    display:block;touch-action:none;cursor:crosshair;z-index:1;
+  }
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,.30) 74%, rgba(0,0,0,.62) 100%);
+  }
+
+  .hud{
+    position:fixed;top:20px;left:22px;z-index:10;
+    display:flex;gap:18px;
+    font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--dim);
+    transition:opacity .6s ease;
+  }
+  .hud b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+  .hud .warp{color:var(--accent-warm);opacity:0;transition:opacity .2s ease}
+  .hud .warp.on{opacity:1}
+
+  .hint{
+    position:fixed;top:22px;left:50%;transform:translateX(-50%);z-index:10;
+    font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:rgba(231,238,246,.38);
+    text-align:center;white-space:nowrap;
+    transition:opacity 1.2s ease;
+  }
+
+  .controls{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+    z-index:10;
+    display:flex;align-items:center;gap:20px;
+    padding:13px 18px;border-radius:15px;
+    background:var(--glass);
+    border:1px solid var(--border);
+    backdrop-filter:blur(16px) saturate(1.15);
+    -webkit-backdrop-filter:blur(16px) saturate(1.15);
+    box-shadow:0 16px 44px rgba(0,0,0,.45);
+    transition:opacity .55s ease, transform .55s ease;
+  }
+  .controls.hidden{opacity:0;transform:translateX(-50%) translateY(12px);pointer-events:none}
+  .hud.hidden,.hint.gone{opacity:0}
+
+  .ctl{display:flex;flex-direction:column;gap:7px;width:116px}
+  .ctl__top{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-family:var(--font-mono);font-size:8.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--dim);
+  }
+  .ctl__top output{color:var(--accent);font-variant-numeric:tabular-nums}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;
+    background:rgba(255,255,255,.14);outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+    background:var(--accent);border:2px solid #0b1016;
+    transition:transform .12s ease;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2)}
+  input[type=range]::-moz-range-thumb{
+    width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid #0b1016;
+  }
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:rgba(255,255,255,.14)}
+
+  .divider{width:1px;align-self:stretch;background:var(--border)}
+
+  .boost{
+    height:46px;padding:0 20px;border-radius:12px;cursor:pointer;
+    font-family:var(--font-mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+    background:rgba(217,178,106,.10);color:var(--accent-warm);
+    border:1px solid rgba(217,178,106,.34);
+    transition:background .16s ease,color .16s ease,box-shadow .22s ease,transform .1s ease;
+    user-select:none;-webkit-user-select:none;
+  }
+  .boost:hover{background:rgba(217,178,106,.18)}
+  .boost.on{
+    background:var(--accent-warm);color:#14100a;border-color:transparent;
+    box-shadow:0 0 0 5px rgba(217,178,106,.16);
+  }
+  .boost:active{transform:scale(.97)}
+
+  @media (max-width:720px){
+    .controls{gap:13px;padding:11px 13px;bottom:14px;border-radius:13px}
+    .ctl{width:84px}
+    .hint{display:none}
+    .hud{font-size:9px;gap:12px}
+  }
+  @media (max-width:560px){
+    .controls{
+      flex-wrap:wrap;justify-content:center;gap:11px 12px;
+      width:calc(100vw - 20px);padding:12px;bottom:10px;
+    }
+    .ctl{width:calc((100% - 24px) / 3)}
+    .divider{display:none}
+    .boost{width:100%;height:40px}
+  }
+</style>
+</head>
+<body>
+<canvas id="space"></canvas>
+<div class="vignette"></div>
+
+<div class="hud" id="hud">
+  <span>fps <b id="hud-fps">60</b></span>
+  <span>stars <b id="hud-stars">1,400</b></span>
+  <span class="warp" id="hud-warp">warp</span>
+</div>
+
+<div class="hint" id="hint">Move to steer &middot; Hold Shift or click to boost &middot; F fullscreen &middot; H controls</div>
+
+<div class="controls" id="controls">
+  <div class="ctl">
+    <div class="ctl__top"><label for="speed">Speed</label><output id="o-speed">1.00&times;</output></div>
+    <input type="range" id="speed" min="0.1" max="3" step="0.05" aria-label="Speed">
+  </div>
+  <div class="ctl">
+    <div class="ctl__top"><label for="density">Density</label><output id="o-density">1,400</output></div>
+    <input type="range" id="density" min="200" max="6000" step="100" aria-label="Star density">
+  </div>
+  <div class="ctl">
+    <div class="ctl__top"><label for="blur">Blur</label><output id="o-blur">38%</output></div>
+    <input type="range" id="blur" min="0" max="0.85" step="0.01" aria-label="Motion blur">
+  </div>
+  <div class="divider"></div>
+  <button class="boost" id="boost" type="button">Boost</button>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var cvs = document.getElementById('space');
+  var ctx = cvs.getContext('2d', { alpha:true });
+
+  var MAX = 6000;
+  var wx = new Float32Array(MAX);
+  var wy = new Float32Array(MAX);
+  var wz = new Float32Array(MAX);
+  var wsz = new Uint8Array(MAX);
+  var wcl = new Uint8Array(MAX);
+  var wph = new Float32Array(MAX);
+
+  var Z_NEAR = 0.12, Z_FAR = 2.0;
+
+  var W = 0, H = 0, DPR = 1;
+  var FOCAL = 800;
+
+  var DEFAULTS = { speed:1, density:1400, blur:0.38 };
+  var params = { speed:1, density:1400, blur:0.38 };
+  var active = 1400;
+
+  var vpx = 0, vpy = 0, tvpx = 0, tvpy = 0;
+  var roll = 0, troll = 0;
+  var lvpx = 0, lvpy = 0, lFocal = 800, lcosR = 1, lsinR = 0;
+  var idleT = 0;
+  var boostT = 0, boostActive = false, boostPtr = false, boostKey = false;
+  var paused = false;
+  var ptr = { x:0, y:0, active:false, last:0 };
+
+  var fps = 60, frames = 0, lastFps = performance.now();
+  var lastNow = performance.now();
+
+  var coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
+  /* star colour classes: cool blue-white, pure white, warm */
+  var COL_H = [208, 0, 34];
+  var COL_S = [58, 0, 74];
+  var COL_L = [92, 98, 86];
+
+  var NCL = 3, NAL = 6, NSZ = 3, NNR = 2;
+  var NB = NCL * NAL * NSZ * NNR;
+  var ALPHA = [0.10, 0.26, 0.44, 0.62, 0.80, 1.0];
+  var bk = [];
+  for (var b0 = 0; b0 < NB; b0++) bk.push([]);
+
+  var hudFps = document.getElementById('hud-fps');
+  var hudStars = document.getElementById('hud-stars');
+  var hudWarp = document.getElementById('hud-warp');
+  var hudEl = document.getElementById('hud');
+  var controlsEl = document.getElementById('controls');
+  var hintEl = document.getElementById('hint');
+  var boostBtn = document.getElementById('boost');
+
+  /* ---------------- state ---------------- */
+
+  function seed(i, spread){
+    wx[i] = (Math.random() * 2 - 1) * 1.35;
+    wy[i] = (Math.random() * 2 - 1) * 1.35;
+    wz[i] = spread ? (Z_NEAR + Math.random() * (Z_FAR - Z_NEAR)) : Z_FAR;
+    wsz[i] = (Math.random() * 3) | 0;
+    wcl[i] = (Math.random() * 3) | 0;
+    wph[i] = Math.random() * 6.283;
+  }
+
+  function seedAll(){
+    for (var i = 0; i < MAX; i++) seed(i, true);
+  }
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    var px = W * H * DPR * DPR;
+    while (px > 3.8e6 && DPR > 1){ DPR -= 0.25; px = W * H * DPR * DPR; }
+    cvs.width = Math.max(1, Math.round(W * DPR));
+    cvs.height = Math.max(1, Math.round(H * DPR));
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (!ptr.active){ vpx = tvpx = W / 2; vpy = tvpy = H / 2; }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, W, H);
+  }
+
+  /* ---------------- frame ---------------- */
+
+  function render(now, dtN){
+    /* --- steering: vanishing point follows the pointer, with a banking roll --- */
+    if (ptr.active && (now - ptr.last) < 4500){
+      tvpx = W / 2 + (ptr.x - W / 2) * 0.62;
+      tvpy = H / 2 + (ptr.y - H / 2) * 0.62;
+      troll = ((ptr.x - W / 2) / W) * 0.13;
+    } else {
+      idleT += 0.0016 * dtN;
+      tvpx = W / 2 + Math.sin(idleT) * W * 0.075;
+      tvpy = H / 2 + Math.cos(idleT * 0.77) * H * 0.065;
+      troll = Math.sin(idleT * 0.5) * 0.03;
+    }
+
+    var kp = 1 - Math.pow(0.84, dtN);
+    vpx += (tvpx - vpx) * kp;
+    vpy += (tvpy - vpy) * kp;
+    roll += (troll - roll) * (1 - Math.pow(0.88, dtN));
+
+    boostT += ((boostActive ? 1 : 0) - boostT) * (1 - Math.pow(0.72, dtN));
+    if (boostT > 0.995) boostT = 1;
+
+    var focal = Math.min(W, H) * 0.92 * (1 - 0.30 * boostT);
+    var bright = 1 + 0.45 * boostT;
+    var cosR = Math.cos(roll), sinR = Math.sin(roll);
+
+    /* --- motion blur: fade what is already there --- */
+    var baseFade = params.blur * 0.94;            /* removal per 60fps frame */
+    var fadeA = 1 - Math.pow(baseFade, dtN);      /* frame-rate independent */
+    if (fadeA > 0.999) fadeA = 1;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,' + fadeA + ')';
+    ctx.fillRect(0, 0, W, H);
+
+    /* --- integrate + project --- */
+    var dz = params.speed * 0.011 * dtN * (1 + boostT * 5.5);
+    var n = active;
+    var invRange = 1 / (Z_FAR - Z_NEAR);
+
+    /* bound the per-star fill cost: long streaks are expensive to rasterise */
+    var maxStreak = 150 + 130 * boostT;
+    var maxStreak2 = maxStreak * maxStreak;
+    /* thin the lines out as density climbs so high counts stay cheap */
+    var widthScale = 1 - Math.min(0.45, Math.max(0, (n - 1500) / 10000));
+
+    for (var b = 0; b < NB; b++) bk[b].length = 0;
+
+    for (var i = 0; i < n; i++){
+      var pz = wz[i];
+      var z = pz - dz;
+
+      if (z < Z_NEAR){
+        seed(i, false);
+        pz = Z_FAR;
+        z = Z_FAR - dz;
+      }
+      wz[i] = z;
+
+      var xw = wx[i], yw = wy[i];
+
+      var ix = xw / z, iy = yw / z;
+      var sx = vpx + (ix * cosR - iy * sinR) * focal;
+      var sy = vpy + (ix * sinR + iy * cosR) * focal;
+
+      var pix = xw / pz, piy = yw / pz;
+      var psx = lvpx + (pix * lcosR - piy * lsinR) * lFocal;
+      var psy = lvpy + (pix * lsinR + piy * lcosR) * lFocal;
+
+      /* clamp runaway streaks (very near stars) before they hit the rasteriser */
+      var sdx = sx - psx, sdy = sy - psy;
+      var slen2 = sdx * sdx + sdy * sdy;
+      if (slen2 > maxStreak2){
+        var inv = maxStreak / Math.sqrt(slen2);
+        psx = sx - sdx * inv;
+        psy = sy - sdy * inv;
+      }
+
+      /* cull streaks whose bounding box misses the viewport */
+      var x1 = sx < psx ? sx : psx, x2 = sx < psx ? psx : sx;
+      if (x2 < 0 || x1 > W) continue;
+      var y1 = sy < psy ? sy : psy, y2 = sy < psy ? psy : sy;
+      if (y2 < 0 || y1 > H) continue;
+
+      var t = 1 - (z - Z_NEAR) * invRange;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+
+      var a = (0.10 + 0.90 * Math.pow(t, 1.7)) * (0.86 + 0.14 * Math.sin(now * 0.0016 + wph[i])) * bright;
+      if (a > 1) a = 1;
+
+      var al = (a * NAL) | 0;
+      if (al >= NAL) al = NAL - 1; else if (al < 0) al = 0;
+      var nr = t > 0.72 ? 1 : 0;
+
+      bk[((wcl[i] * NAL + al) * NSZ + wsz[i]) * NNR + nr].push(psx, psy, sx, sy);
+    }
+
+    lvpx = vpx; lvpy = vpy; lFocal = focal; lcosR = cosR; lsinR = sinR;
+
+    /* --- draw batched streaks --- */
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+
+    for (var c = 0; c < NCL; c++){
+      for (var al2 = 0; al2 < NAL; al2++){
+        var stroke = 'hsla(' + COL_H[c] + ',' + COL_S[c] + '%,' + COL_L[c] + '%,' + ALPHA[al2] + ')';
+        for (var s = 0; s < NSZ; s++){
+          for (var r = 0; r < NNR; r++){
+            var arr = bk[((c * NAL + al2) * NSZ + s) * NNR + r];
+            var len = arr.length;
+            if (!len) continue;
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = (0.65 + s * 0.8) * (r ? 1.9 : 1) * widthScale;
+            ctx.beginPath();
+            for (var k = 0; k < len; k += 4){
+              ctx.moveTo(arr[k], arr[k + 1]);
+              ctx.lineTo(arr[k + 2], arr[k + 3]);
+            }
+            ctx.stroke();
+          }
+        }
+      }
+    }
+  }
+
+  /* ---------------- loop ---------------- */
+
+  function loop(now){
+    requestAnimationFrame(loop);
+
+    var dt = now - lastNow;
+    lastNow = now;
+    if (!isFinite(dt) || dt <= 0) dt = 16.7;
+    if (dt > 60) dt = 60;
+    var dtN = dt / 16.6667;
+    if (dtN < 0.4) dtN = 0.4; else if (dtN > 2.5) dtN = 2.5;
+
+    updateUI(now);
+
+    if (paused){
+      lastFps = now; frames = 0;
+      return;
+    }
+
+    render(now, dtN);
+
+    frames++;
+    if (now - lastFps > 500){
+      fps = Math.round(frames * 1000 / (now - lastFps));
+      frames = 0;
+      lastFps = now;
+      hudFps.textContent = fps;
+      hudStars.textContent = active.toLocaleString('en-IN');
+    }
+  }
+
+  /* ---------------- auto-hiding UI ---------------- */
+
+  var pinned = false;
+  var pointerInControls = false;
+  var uiUntil = performance.now() + 6500;
+  var uiShown = true;
+
+  function updateUI(now){
+    var show = pinned || coarse || pointerInControls ||
+               (now < uiUntil) || (ptr.active && ptr.y > H * 0.80);
+    if (show !== uiShown){
+      uiShown = show;
+      controlsEl.classList.toggle('hidden', !show);
+      hudEl.classList.toggle('hidden', !show);
+    }
+  }
+
+  /* ---------------- input ---------------- */
+
+  window.addEventListener('pointermove', function(e){
+    ptr.x = e.clientX;
+    ptr.y = e.clientY;
+    ptr.active = true;
+    ptr.last = performance.now();
+  }, { passive:true });
+
+  window.addEventListener('pointerdown', function(e){
+    if (e.target && e.target.closest && e.target.closest('.controls')) return;
+    ptr.x = e.clientX; ptr.y = e.clientY;
+    ptr.active = true; ptr.last = performance.now();
+    if (e.pointerType === 'touch') return;   /* touch drag steers without boosting */
+    boostPtr = true;
+    syncBoost();
+  }, { passive:true });
+
+  window.addEventListener('pointerup', function(){ boostPtr = false; syncBoost(); }, { passive:true });
+  window.addEventListener('pointercancel', function(){ boostPtr = false; syncBoost(); }, { passive:true });
+  window.addEventListener('blur', function(){
+    boostPtr = false; boostKey = false; syncBoost();
+  });
+
+  function syncBoost(){
+    boostActive = boostPtr || boostKey;
+    boostBtn.classList.toggle('on', boostActive);
+    hudWarp.classList.toggle('on', boostActive);
+  }
+
+  boostBtn.addEventListener('pointerdown', function(e){
+    e.preventDefault();
+    boostPtr = true; syncBoost();
+  });
+  boostBtn.addEventListener('pointerup', function(){ boostPtr = false; syncBoost(); });
+  boostBtn.addEventListener('pointercancel', function(){ boostPtr = false; syncBoost(); });
+  boostBtn.addEventListener('pointerleave', function(){ boostPtr = false; syncBoost(); });
+
+  controlsEl.addEventListener('pointerenter', function(){ pointerInControls = true; });
+  controlsEl.addEventListener('pointerleave', function(){ pointerInControls = false; });
+  controlsEl.addEventListener('pointerdown', function(){
+    uiUntil = performance.now() + 9000;
+  }, { passive:true });
+
+  window.addEventListener('keydown', function(e){
+    if (e.target && e.target.matches && e.target.matches('input,button')) return;
+    var k = e.key.toLowerCase();
+    if (e.key === 'Shift' || k === 'b'){ boostKey = true; syncBoost(); }
+    else if (k === 'f'){
+      if (!document.fullscreenElement){
+        if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+      } else if (document.exitFullscreen) document.exitFullscreen();
+    }
+    else if (k === 'h'){ pinned = !pinned; uiUntil = performance.now() + 9000; }
+    else if (k === 'r'){ resetAll(); }
+    else if (e.key === ' '){ e.preventDefault(); paused = !paused; }
+  });
+
+  window.addEventListener('keyup', function(e){
+    var k = e.key.toLowerCase();
+    if (e.key === 'Shift' || k === 'b'){ boostKey = false; syncBoost(); }
+  });
+
+  /* ---------------- controls ---------------- */
+
+  var updaters = [];
+
+  function bindRange(id, key, fmt){
+    var el = document.getElementById(id);
+    var out = document.getElementById('o-' + id);
+    function sync(){
+      el.value = params[key];
+      out.textContent = fmt(+el.value);
+    }
+    el.addEventListener('input', function(){
+      params[key] = +el.value;
+      out.textContent = fmt(+el.value);
+      if (key === 'density') active = params.density | 0;
+    });
+    sync();
+    updaters.push(sync);
+  }
+
+  bindRange('speed', 'speed', function(v){ return v.toFixed(2) + '\u00d7'; });
+  bindRange('density', 'density', function(v){ return v.toLocaleString('en-IN'); });
+  bindRange('blur', 'blur', function(v){ return Math.round(v * 100) + '%'; });
+
+  function resetAll(){
+    for (var k in DEFAULTS) params[k] = DEFAULTS[k];
+    updaters.forEach(function(f){ f(); });
+    active = params.density | 0;
+    seedAll();
+    roll = 0; troll = 0; idleT = 0;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, W, H);
+    uiUntil = performance.now() + 9000;
+  }
+
+  /* ---------------- boot ---------------- */
+
+  seedAll();
+  resize();
+  active = params.density | 0;
+
+  setTimeout(function(){ hintEl.classList.add('gone'); }, 7000);
+
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
